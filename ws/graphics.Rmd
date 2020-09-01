@@ -72,10 +72,42 @@ Motivating data
 ```{r, results='markup'}
 head(BOD)
 summary(BOD)
+##layer data=data.frame
+## identity dont do anything with data
+## point means point graph
+## + layers of lines
+
+
+
+p <- ggplot(data=BOD, map=aes(y=demand, x=Time)) + geom_point() + geom_line()
+
+## scaling
+
+p <- p + scale_x_sqrt(name="Time")
+
+Plog <- p + scale_x_log10(name="Time")
+
 ```
 
 Layers
 ==========
+
+```{r}
+head(CO2)
+
+ggplot(CO2)+geom_point(aes(x=conc,y=uptake), colour="red")
+
+## look into colour codes and pallets
+
+## anything inside brakets has a scale, anything outside has no scale
+
+ggplot(CO2)+geom_point(aes(x=conc,y=uptake, colour="blue")) ## this creates a graph with red dots and a legend, thinks blue is a category
+```
+
+
+
+
+
 
 - **layers** of data driven objects
     - **geom**etric objects to represent data
@@ -90,24 +122,64 @@ Primary geometric objects
 
 `geom_bar`
 ------------
+```{r}
+ggplot(diamonds) + geom_bar(aes(x = carat))
+
+ggplot(diamonds) + geom_bar(aes(x=cut))
+
+ggplot(diamonds) + geom_bar(aes(x=cut, fill=clarity))
+
+ggplot(diamonds) + geom_bar(aes(x=cut, fill=clarity), position='dodge')
+
+```
 
 
 `geom_boxplot`
 ----------------
+```{r}
+ggplot(diamonds) + geom_boxplot(aes(x= "carat", y = carat)) ## refer back to R upgrade
+ggplot(diamonds) + geom_boxplot(aes(x= cut, y = carat)) ## shows outliers, and some evidence for skewed data
+
+```
 
 
 `geom_line`
 -------------
+```{r}
+ggplot(CO2) + geom_line(aes(x = conc, y = uptake, group=Plant))
+ggplot(CO2) + geom_line(aes(x = conc, y = uptake, colour=Plant))
+## also important to do colours and different types of graphs (to satisfy everyone, even people who are colourblind)
+
+```
 
 
 `geom_point`
 ------------
+```{r}
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake, colour=Plant))
+```
 
 `geom_smooth`
 ------------
+```{r}
+ggplot(CO2) + geom_smooth(aes(x=conc, y=uptake), method='lm') +geom_point(aes(x=conc, y=uptake))
+
+##method lm = linear model, but in this case does not a good job of fitting the data
+
+ggplot(CO2) + geom_smooth(aes(x=conc, y=uptake, group=Plant), method='lm') +geom_point(aes(x=conc, y=uptake))
+
+## can also remove method=lm and let ggplot choosem, uses a GAM
+
+ggplot(CO2) + geom_smooth(aes(x=conc, y=uptake, group=Plant)) +geom_point(aes(x=conc, y=uptake))
+```
 
 `geom_polygon`
 ----------------
+```{r}
+library(maps)
+library(mapdata)
+
+```
 
 `geom_tile`
 ----------------
@@ -126,6 +198,15 @@ Secondary geometric objects
 
 Coordinate systems
 ====================
+```{r}
+##cartesian, as used before is standard but can use polar or flipped
+
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake)) + coord_polar()
+
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake)) + coord_flip()
+
+
+```
 
 
 Scales
@@ -133,6 +214,30 @@ Scales
 
 `scale_x_` and `scale_y_`
 ----------------------------
+
+```{r}
+## naming your axis appropriately
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake)) + scale_x_continuous(name="CO2 conc")
+
+##Square brackets mean subscript, ^ is superscript
+##Tilts important as they are where your space will be, cannot have spaces in an expression
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake)) + scale_x_continuous(name=expression(Ambient~CO2[2]~concentration~(mg/1)))
+
+##expand axis, 0 is a multiplier, 200 just adds, play with values
+ggplot(CO2, aes(y=uptake, x=conc)) + geom_point() + scale_x_continuous(name = "CO2 conc", expand=c(0,200))
+
+## axis on a log scale
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake)) + scale_x_log10(name="CO2 conc", breaks=as.vector(c(1,2,5,10) %o% 10^(-1:2)))
+
+## Add more indices on x - axis see above
+##-1:2 creates a vector of integers from -1 to 2
+## 10 raised to all these integers 
+## c(1,2,5,10) then %o% (means outer product)
+
+
+
+
+```
 
 Other scales
 ---------------
@@ -145,6 +250,10 @@ Other scales
 
 `scale_size`
 ----------------
+```{r}
+
+```
+
 
 `scale_shape`
 ----------------
@@ -157,12 +266,40 @@ Other scales
 
 Facets
 ==========
+```{r}
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake, colour=Type)) + facet_wrap(~Plant)
+
+ggplot(CO2) + geom_line(aes(x=conc, y=uptake, colour=Type)) + facet_wrap(~Plant)
+
+ggplot(CO2) + geom_smooth(aes(x=conc, y=uptake, colour=Type)) + geom_point(aes(x=conc, y=uptake, colour=Type)) + facet_wrap(~Plant)
+
+## make axis vary based on data
+ggplot(CO2) + geom_smooth(aes(x=conc, y=uptake, colour=Type)) + geom_point(aes(x=conc, y=uptake, colour=Type)) + facet_wrap(~Plant, scales='free_y')
+
+##GRid
+
+ggplot(CO2) + geom_point(aes(x=conc, y=uptake, colour=Type)) + facet_grid(Type~Treatment)
+```
 
 Themes
 ==========
 
 `theme_classic`
 ----------------
+```{r}
+
+## change system colours
+ggplot(CO2, aes(y =  uptake, x = conc)) + geom_smooth() + geom_point() + theme_bw()
+
+## Change position of x axis label
+ggplot(CO2, aes(y =  uptake, x = conc)) + geom_smooth() + geom_point() + theme(axis.title.x = element_text(margin = margin(t=2, 'lines')))
+
+## how to get graph out of R
+G1 <- ggplot(CO2, aes(y =  uptake, x = conc)) + geom_smooth() + geom_point() + theme(axis.title.x = element_text(margin = margin(t=2, 'lines')))
+
+ggsave(filename='AIMS R Course - Tutorial/G1.png', G1, width = 7, height = 5, units='cm', dpi=300)
+```
+
 
 `theme_bw`
 ----------------
