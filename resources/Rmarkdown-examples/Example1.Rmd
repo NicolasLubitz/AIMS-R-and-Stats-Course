@@ -6,7 +6,11 @@ date: 16-06-2020
 
 # This is the title
 
-```{r summary}
+
+Something about this analysis 
+
+echo=FALSE - does not show code but only output/results
+```{r summary, echo=FALSE}
 x <- rnorm(10)
 summary(x)
 ```
