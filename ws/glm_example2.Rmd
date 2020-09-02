@@ -99,28 +99,99 @@ str(polis)
 
  
 # Exploratory data analysis
+```{r}
+
+## This is a special binomial distribution - either 0 or 1 
+## the linear predictor in this case is neg inf to inf but we have to link it back to only 0 or 1
+## this is achieved by a logit link  (Log odds in this case, present not present - thats the scale)
+## Binomial are the most complicated to be interpreted, because it is a hard scale
+## Binomial assumes that variance is related to the mean
+## With binomials there will be a switch somewhere within the overlap section
+
+ggplot(polis, aes(x= RATIO, y=PA)) + geom_point()
+## In binomial data if there is no overlap it wont work - you do not need to perform a statistical analysis, its obvious, no uncertainty
+
+```
+
+
 
 Model formula:
 $$
 y_i \sim{} \mathcal{Bin}(n, p_i)\\
 ln\left(\frac{p_i}{1-p_i}\right) = \beta_0 + \beta_1 x_i
 $$
+# Fit the model # Model validation
+```{r}
+##When you run a glm you have to nominate a family, in this case binomial
 
+polis.glm <- glm(PA ~ RATIO, family=binomial(link='logit'), data=polis)
+autoplot(polis.glm, which = 1:6, label.repel = TRUE)
 
-# Fit the model
+##Top left is a residual plot. For binomial data always awkward to interpret, only question to ask: Is it still centred around 0??
+## THe last three plots relate to influence, the cooks distance is most important. 0.8 or above is big influence, observation is more influential than any of the others. In this case its either an island where you wouldnt expect them but they are there or you would expect them but they are not there. Maybe this island is unusual?
+## Quickly redo scatter plot
 
-# Model validation
+polis %>% mutate(obs=1:n()) %>% ggplot(aes(y=PA, x=RATIO)) + geom_text(aes(label=obs))
 
-Explore a lack of fit
+## observation 3 is unusual, we do not know why so we keep this observation - no reason to take it out
+## in any case this particular observation probably makes the test more conservative which is good
+## if your data has more variation than what the mean would suggest, your data is overdispersed, its violating the homogeneity of variance assumption
+## to test the model, we can do a goodness of fit test
+## R^2 is the strength of a relationship, the larger the sum of squares the less the model fits the data = goodness of fit test
+polis.resid <- sum(resid(polis.glm, type = "pearson")^2)
+## alternatively
+polis.resid <- resid(polis.glm, type="pearson")^2 %>% sum
+polis.resid
+## 15.33 units of sum of squares, is this a lot? residuals should follow a chi square distribution
+## IF we calculate it like 1-p than we can interpret it like a p value, lack of fit: Is there any evidence for a lack of fit?
+1-pchisq(polis.resid, polis.glm$df.resid)
+## 0.5715, if the value is greater than 0.05 than there is no evidence for a lack of fit, in our case there is no evidence for a lack of fit, the data fits the model fine, residual is the difference between observed and expected
+## this is a glm it is not trying to optimize for residuals, so its a bit unfair to judge this model based on a parameter it was never designed to optimize in the first place. GLM works with maximum likelihood. Instead of residuals we use deviance. Should also follow chi squared distribution but is calculated from likelihood.
+1-pchisq(polis.glm$deviance, polis.glm$df.resid)
+## 0.6514215, Degrees of freedom is 17 because we substract two parameters we calculate (intercept and slope)
+## still suggests no lack of fit
+## what if there was a lack of fit? maybe too simplistic? maybe model is over-dispersed? adding a covariate, such as population size, distance to other islands maybe it may explain more and fit the model better
+## Another option is to fit a mixture model, like a beta binominal (covered later), it accounts for extra variability.
+```
+# Model investigation / hypothesis testing # Predictions
+```{r}
+plot(allEffects(polis.glm, residuals="TRUE"), type='response')
+## blue line is sigmoidal, rate of change is not constant,pink line is a smoother (not always useful in binomial)
+##GGplot version
+plot_model(polis.glm, type='eff', show.data=TRUE)
 
-# Model investigation / hypothesis testing
+## Interpreting the coeffiecients we get out of it
+summary(polis.glm)
+## We get slope and intercept, p-value is less than 0.05
+## slope tells you at which rate y is changing in response to x, but we scaled to only 0 and 1 (binominal), so we cant directly interpret -0.22
+exp(-0.22)
+## 0.8025, we back transformed it partly, for every one unit change in our predictor (ratio), the odds of the lizard being present changes by a factor of 0.8, declined by 20% in other words. odds change at a constant rate, the probability does not. See curve, rate of change of probability becomes more dramatic.
 
+polis.glm %>% tidy(conf.int=TRUE) %>% kable
+## the inflection point, is just the ratio of -intercept and slope
+(ld50 <- -polis.glm$coef[1]/polis.glm$coef[2])
+##16.4242
+## choose other lds, like 90
+ld=MASS::dose.p(polis.glm, p=c(0.5,0.9))
+## Equivalent R^2, we do not calculate it from residuals but from deviance
+1-(polis.glm$deviance/polis.glm$null)
+##0.4590197, R^2 is normally Sum of squares(explained)/ Sum of Squares(Total), for a glm is a pseudo R^2 is Deviance/Null Deviance = this is the proportion of unexplained components but we want explained thats why we do 1- deviance/null
+```
+# Predictions and Summary figures
+```{r}
+polis.grid <- polis %>% data_grid(RATIO=seq_range(RATIO, n=100))
 
-# Predictions
+newdata <- emmeans(polis.glm, ~RATIO, at=polis.grid, type='response') %>% as.data.frame()
 
+##plot it asymp calculates confidence intervals
+## mean + or - standard error x t-distribution (0.975, df) but in our case it uses the asymptotic version which is 2, so mean + or - standard error x 2
+ggplot(newdata, aes(y=prob, x=RATIO)) +
+  geom_ribbon(aes(ymin=asymp.LCL, ymax=asymp.UCL), fill='blue', alpha=0.2) + 
+  geom_line() +
+  theme_classic()
 
+```
 
-# Summary figures
 
 
 

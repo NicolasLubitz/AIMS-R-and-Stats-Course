@@ -98,6 +98,18 @@ glimpse(peake)
 
 
 # Exploratory data analysis
+```{bash}
+##It is a count, there can only be 18 individuals not 18.4, poisson distribution is best, because it works with counts
+## non-linear, fewer data points at larger areas,seems like area is some sort of skewed distribution. Not uniform, nor normally distributed, here they are skewed.
+ggplot(peake, aes(x= AREA, y = INDIV)) + geom_point() + geom_smooth()
+
+## we can plug it on a log scale
+ggplot(peake, aes(x= AREA, y = INDIV)) + geom_point() + geom_smooth() + scale_x_log10() + scale_y_log10()
+## linearity now looks better, do not have a consistent trend in noise as before, this now becomes a better assessement for a model we might want to fit. If we were to log our x variable and use poisson this is a reasonable representation. it satisfies our requirements, it has linearity and normality
+
+
+```
+
 
 Model formula:
 $$
@@ -107,35 +119,81 @@ $$
 
 
 # Fit the model
-
+```{r}
+peake.glm <- glm(INDIV ~ log(AREA), data=peake, family=poisson(link='log'))
+autoplot(peake.glm, which=1:6)
+1-pchisq(peake.glm$deviance, peake.glm$df.resid)
+## 0 
+##Poisson assumes mean and variance are equal, but is count data not poisson? but how many individuals is influenced by heaps of things not just muscle clump, we are only looking at only one variable. Our model is too simplistic. We could add more covariates. Maybe add a proxy for all the other variables we could have measured?? involves mixed effects models. We can add a a variable that soaks up all the unexplained variability.
+```
 ## Candidate models {.tabset .tabset-faded}
-
 ### LM
-
 #### Model validation
-
 ### Poisson (GLM)
 #### Model validation
 Explore a lack of fit
-
 Explore overdispersion
-
 ### Negative Binomial (GLM)
+```{r}
+##additional variability can be due to clustering, negative binomial is a great catch for clustering.
+##Often 0 is not real, but they are due to our inability to detect them, there are more 0s than a poisson would expect. negative binominal can account for that.
+#- adding a variable
+#- 0 inflated models
+#- negative binomial
+# but need to figure out what is actually going wrong to choose another option
+## We can calculate the dispersion paramater
+peake.glm$deviance/peake.glm$df.resid ## This number should be 1, so deviance equals mean
+## It is 67.29376, clearly over-dispersed, dispersion is greater than 3, there is a problem.
+## We have few 0s so thats not a problem, and we also don't have additional variables to add, so we try negative binomial
 
-#### Model validation
+peake.glm1 <- glm.nb(INDIV ~ log(AREA), data=peake)
+autoplot(peake.glm1, which=1:6)
 
-Explore a lack of fit
+##goodness of fit test
+1-pchisq(peake.glm1$deviance, peake.glm1$df.residual)
+## 0.3036, 
+##Overdispersion?: looks good too, not over-dispersed = 1.1278
+peake.glm1$deviance/peake.glm1$df.residual
+## Information criteria to see how good model is Akiak
+AIC(peake.glm, peake.glm1)
+##           df       AIC
+##peake.glm   2 1738.9471
+##peake.glm1  3  312.1603
+## So glm1, the negative binomial is a way better fit, two units difference is important for AIC
+## for small data sets you can use AICc
+AICc(peake.glm, peake.glm1)
+#            df      AICc
+#peake.glm   2 1739.4926
+#peake.glm1  3  313.3032
+plot(allEffects(peake.glm1, residuals=TRUE), type='response')
+## type response ensures were back on the link scale not the log scale
 
-Explore overdispersion
+summary(glm1)
+## These values are on a log scale
+## for every unit change in log area, there is a 0.82 change of log of individuals.
+## for every one unit change in log area, the number of individuals increases by a factor of 2.27 (more doubling)
+## minus plus becomes x and / in log laws
 
-## Comparisons (model selection)
+## keep in mind it is all expressed on a log scale
+tidy(peake.glm1, conf.int=TRUE) %>% kable
 
+## strength of relationship
+1-(peake.glm1$deviance/peake.glm1$null)
+##0.838 = 84% of variability we can explain
+## calculating R^2, similar as above, but function below is the accepted methodology, there is a version for mixed models too
+r.squaredLR(peake.glm1)
+## 0.8551296
 
-# Model investigation / hypothesis testing
-
-# Predictions
-
+```
 # Summary figures
+```{r}
+peake.grid <- peake %>% data_grid(AREA=seq_range(AREA, n=100))
+newdata <- emmeans(peake.glm1, ~AREA, at=peake.grid, type='response') %>% as.data.frame()
+ggplot(newdata, aes(y=response, x=AREA)) + geom_ribbon(aes(ymin=asymp.LCL, ymax=asymp.UCL), fill='blue', alpha=0.3) +
+  geom_line() + geom_point(data=peake, aes(y=INDIV)) + scale_x_log10() + scale_y_log10() + theme_classic() 
+
+```
+
 
 
 # References

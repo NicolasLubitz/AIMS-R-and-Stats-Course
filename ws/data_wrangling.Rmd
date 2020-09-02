@@ -75,23 +75,103 @@ Important data manipulation functions:
 
 # Piping
 
+strings single functions together so it performs all these outputs together in sequence
+e.g.,
+
+
+
 # Data files
 
 ```{r getData, results='markdown', eval=TRUE}
 load(file='../data/manipulationDatasets.RData')
 data.1 %>% head
+summary(data.1)
+str(data.1)
+glimpse(data.1)
 ```
 
 Sorting data
 ================
 
+```{r sorting}
+arrange(data.1, LAT)
+
+data.1 %>% arrange(LAT)
+
+arrange(data.1, -LAT) # descending order
+
+arrange(data.1, Cond,Temp) # Sort by different things, categorial values presented in alphabetical order
+data.1 %>% arrange(Cond & Temp) #same but piped
+
+arrange(data.1, Between, Cond)
+```
 
 Manipulating factors
 =======================
+```{r}
+levels(data.1$Cond) # Show what order these factors are in
+
+data.3 <- data.1
+levels(data.3$Cond)
+
+data.3$Cond <- factor(data.3$Cond, levels=c('L', 'M', 'H'), labels=c("Low", "Medium", "High")) # Make factors more sensible, order them, give labels
+
+```
 
 
 Subset columns
 =================
+
+```{r}
+data.1 %>% select(Between, Plot, Cond, Time, Temp) ##Subset columns
+
+dplyr::select(data.1 , Between, Plot, Cond, Time, Temp)
+
+select(data.1, -LAT, -LONG)
+
+head(data.1)
+
+##helper functions
+
+contains()
+ends_with()
+starts_with()
+matches()
+
+select(data.1, contains('L'))
+
+select(data.1, matches('^T[a-z]m.')) ## Search for start with capital T, then contain a-z, then contain "m", then contain
+                                     ## any character
+
+
+##Practise with nasa data set - select only lat long and anything that starts with cloud
+head(nasa)
+
+head(select(nasa, lat, long, starts_with("cloud")))
+
+##everything function can be helpful when sorting
+select(data.1, Time, everything())
+
+## use tikus data set
+tikus[1:10, c(1:3, 76:77)]
+
+## select rep,time and only species that do not contain pora
+
+dplyr::select(tikus, -contains('pora'))
+
+or
+
+dplyr::select(tikus, rep, time, everything(), -contains('pora'))
+
+##If a variable contains space you have to refer to it with backticks ''
+dplyr::select(tikus, 'Psammocora contigua')
+
+##pull spits out individual vector
+pull(data.1, Temp)
+
+## rename your columns
+rename(data.1, Condition=Cond, Temperature=Temp)
+```
 
 ## Regular expressions (regex)
 
@@ -101,12 +181,68 @@ https://github.com/rstudio/cheatsheets/raw/master/data-transformation.pdf
 Filtering
 =============
 
+```{r}
+filter(data.1, Cond=='H') ## Two equal signs means questions, not is equal too, but DOES cond equal H??
+
+filter(data.1, Cond %in% c('H', 'M')) ## for multiple filter criteria
+
+filter(data.1, Cond=='H' & Temp<25) ## cond is h and temp is less than 25
+
+filter(data.1, Cond=='H' & Temp<25) ## cond is h OR temp is less than 25
+
+filter(data.1, Temp<20 & (LAT>20 | LONG<145))
+
+## above is filtering by criteria
+## We can also filter by location
+
+slice(data.1, 1:4)
+
+slice(data.1, c(1:4,7))
+
+
+data.3<-filter(data.1, Plot=='P1') ## thise filters but in graphs and tables still includes empty spaces for dropped variables
+
+##use drop levels
+
+data.1 %>% filter(Plot=="P1") %>% droplevels()
+
+## Always remember to store your subsets to actually work with them
+
+data.processed <- data.1 %>% filter(Plot=="P1") %>% droplevels()
+
+```
+
 Adding columns - mutate
 ===========================
 
+```{r}
+##nonsense but for examples sake
+
+mutate(data.1, LL=LAT+LONG)
+
+##log transform
+
+mutate(data.1, logTemp=log(Temp))
+
+##centering your data
+data.1 %>% mutate(cTemp=Temp-mean(Temp))
+
+
+```
 
 Summarising (aggregating) data
 =================================
+
+```{r}
+data.1 %>% summarize(Mean=mean(Temp), Var=var(Temp)) ## summary stats
+
+summarise(data.1, across(c(Temp, LAT), list(Mean=mean, Var=var)))
+
+summarise(data.1, across(where(is.numeric), list(Mean=mean, Var=var)))
+
+summarise(data.1, across(where(is.numeric), mean), across(where(is.factor), length)) ## with logical argument
+
+```
 
 Piping
 =======
@@ -114,15 +250,91 @@ Piping
 Grouping (=aggregating)
 =========================
 
+```{r}
+data.1 %>% group_by(Between,Plot) %>% summarise(Mean=mean(Temp))
+
+data.1 %>% group_by(Plot) %>% arrange(Temp) ##group each plot by temp
+
+```
 Reshaping data
 =================
+```{r}
+## Wide data to long data - Gathering
 
-## Gathering
+data.w %>% gather(Time, Count, Time.0:Time.2)
+```
 
-## Spread
+```{r}
+## Long data to wide - Spreading
+
+
+```
 
 Combining data
 =================
+
+```{r}
+## ONLY KEEP FULL MATCHES BY BOTH - S3 and S7 will be absent
+
+inner_join(data.bio, data.chem)
+
+##other option is a full joint
+
+full_join(data.bio, data.chem)
+
+##left join keeps all of your first data set so S3 is missing and S7 is kept with NA for chem data
+## Right join is reverse on it
+
+left_join(data.bio, data.chem)
+right_join(data.bio, data.chem)
+## incorporate lat and longs into the bio data
+
+left_join(data.bio, data.geo, by=c("Plot"))
+```
+
+Additional remarks on data wrangling
+
+```{r}
+library(tidyverse)
+
+##playing with dates
+temporal.data <- read.csv(file="AIMS R Course - Tutorial/data/temporal.data.csv", strip.white = TRUE)
+
+## make dates into dates in R
+
+temporal.data %>% mutate(Time=ymd_hms(Time))
+
+date1 <- '2020-02-29'
+date2 <- '2020-05-03'
+
+ymd(date1)
+
+as.numeric(ymd(date1))
+18321
+Diff=ymd(date2) - ymd(date1)
+Diff
+64
+
+## prints it straight away if wrapped in brackets
+(Diff=ymd(date2) - ymd(date1))
+
+## express a time period
+period(1, 'month')
+ymd(date1) + period(1, 'month')
+duration(1, 'month')
+
+ymd(date1) + duration(1, 'month')
+
+##aggregate dates - summary of times
+
+temporal.sum <- temporal.data %>% mutate(Time = ymd_hms(Time)) %>% group_by(Site) %>% mutate(Hours=(Time - min(Time))/dhours(1), Hours = ceiling(Hours + 0.001)) %>% group_by(Site, Hours) %>% summarize(Mean=mean(Resp)) %>% ungroup()
+
+##always ungroup at end (at least most of the time) because it does calculations based on grouping from here on
+
+## Could do this for bull sharks, mean detections per month per bull shark per site
+
+
+```
 
 Applied examples
 ===================

@@ -113,7 +113,22 @@ summary(quinn)
 
 	
 # Exploratory data analysis
-	
+```{r}
+## Make variables categorial
+
+quinn<- quinn %>% mutate(SEASON = factor(SEASON), DENSITY = factor(DENSITY))
+
+## Boxplots (combination of density and season) one with most levels put on x-axis to avoid using lots of colours
+
+ggplot(quinn, aes(y=RECRUITS, x=SEASON, fill=DENSITY)) + geom_boxplot()
+
+## could see a small problem with nmore variance (bigger boxes in higher laying samples)
+## log scale
+
+ggplot(quinn, aes(y=RECRUITS, x=SEASON, fill=DENSITY)) + geom_boxplot() + scale_y_log10()
+## possoin moddel
+```
+
 Model formula:
 $$
 \begin{align}
@@ -125,20 +140,38 @@ $$
 where $\boldsymbol{\beta}$ is a vector of effects parameters and $\bf{X}$
 is a model matrix representing the intercept and effects of season, density and their interaction on mussel recruitment.
 
-
 # Fit the model
-
+```{r}
+## star means each of the terms plus interactions
+quinn.glm1 <- glm(RECRUITS ~ DENSITY*SEASON, data=quinn, family=poisson(link='log'))
+```
 
 # Model validation
-
-
-
-
-
-
-
-
+```{r}
+autoplot(quinn.glm1, which=1:6)
+```
 # Model investigation / hypothesis testing
+```{r}
+1-pchisq(quinn.glm1$deviance, df=quinn.glm1$df.residual)
+##2.457479e-12 evidence for lack of fit, could be driven by the outlier, 
+## Check for dispersion
+quinn.glm1$deviance/quinn.glm1$df.residual
+##3.677366 means model is overdispersed, no good fit. But we know there were 0s in the data, lets explore how we might assess overdispersion, is there an excessive number of zeros. Lets count up number of zeros, what proportion of our data is zeros, then we compare that to how many we should expect to get. Ideally do that for every population, this example one population with zeros (Winter-low).
+
+## two equals is a question, Total =n gives totals in rows,
+quinn %>% group_by(SEASON, DENSITY) %>% summarise(Mean=mean(RECRUITS), Zeros = sum(RECRUITS==0), Total = n()) %>% mutate(Prop = Zeros/Total)
+## 0 for 2 / 3 observations is very high
+##How many zeros did we expect?
+
+rpois(1, lambda=2.67)
+x <- rpois(100000000, lambda=2.67)
+tab.1= table(x==0)
+tab.1/sum(tab.1)
+
+
+
+
+```
 
 
 
