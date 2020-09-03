@@ -74,7 +74,7 @@ glimpse(mckeon)
 ```
 
 
-# Exploratory data analysis
+
 
 Model formula:
 $$
@@ -86,15 +86,83 @@ where $\boldsymbol{\beta}$ and $\boldsymbol{\gamma}$ are vectors of the fixed an
 and $\bf{X}$ is the model matrix representing the overall intercept and effects of symbionts on the probability of the colony experiencing predation.
 $\bf{Z}$ represents a cell means model matrix for the random intercepts associated with individual coral colonies.
 
-# Fit the model
+# Exploratory data analysis and # Fit the model # Model validation
+```{r}
+## Predation on corals (single factor anova), treatment is wether having a symbiont in the form of a crab or shrimp can reduce predation. Blocks are tanks, the symbiont is the treatment. Each treatment is applied to each block a randomized block design. 
+## We should also change the order of symbionts because its alphabetical now for the model, as we declare our factors lets change order of levels for symbionts
+
+mckeon <- mckeon %>% mutate(BLOCK=factor(BLOCK), SYMBIONT=factor(SYMBIONT, levels=c('none','crabs','shrimp','both')))
+
+##Plot: X axis we want factor with most levels (symbiont), y-axis is response (predation 0 or 1) and plot it seperately for each plot so we can see how each one of them performs 
+
+ggplot(mckeon, aes(y=PREDATION, x=SYMBIONT)) + geom_point(position=position_jitter(width=0.2, height=0)) + facet_wrap(~BLOCK)
+
+## Does not look like baseline likelihood for predation (intercept) is not the same. Random intercepts vs. random slopes
+## We know were using a binomial distribution because we only have 0s and 1s
+#Lets fit a random intercept and then a random slope model
+
+mckeon.glmmTMB <- glmmTMB(PREDATION ~ SYMBIONT + (1|BLOCK), data=mckeon, family=binomial(link='logit'), REML=FALSE)
+
+mckeon.glmmTMB1 <- glmmTMB(PREDATION ~ SYMBIONT + (SYMBIONT|BLOCK), data=mckeon, family=binomial(link='logit'), REML=FALSE)
+
+## did not work, rerun with REML
+
+mckeon.glmmTMB <- update(mckeon.glmmTMB, REML=TRUE)
+
+plot_model(mckeon.glmmTMB, type='diag')
+##ggplot plot looks good, but binomials are harder to interpret so we only get one graph but have learned a new method that gives us more info, graph on right shows the symbionts (1-4), there residuals
+
+simulateResiduals <- simulateResiduals(mckeon.glmmTMB, plot=TRUE)
+## these diagnostics look good
+
+summary(mckeon.glmmTMB)
+
+## units for means are on a log odds scale, 4.42 for the non group
+exp(4.42)
+## 83.09, being predated is 83% higher than not being predated on in the none group
+##crab group: the odds of predation are substantially less than the none group, risk of predation is only 4% of that, a 96% decline in odds of being predated. They are still experiencing predation but not as bad as none group
+## what about both group
+exp(-5.15)
+## is 0.005799, odds of 0.5 to be predate, less likely to be predated than predated, 99.4% reduction on odds being predated.
+
+tidy(mckeon.glmmTMB, effect='fixed', conf.int=TRUE, exponentiate = TRUE) %>% kable
+## This only tells us every info in relation to none
+## If we want to know crab vs. shrimp, or either 1 vs. having 2, or comparing none, vs. having a symbiont, we need a contrast matrix, we reparameteriz our model to fit out specified categories.
+#         crab vs. shrimp      1 vs 2      none vs symbiont
+# none        0                   0                1
+# crabs       1                  -0.5              -1/3
+# shrimp      -1                 -0.5              -1/3
+# both         0                   1               -1/3
+# can make 3 comparisons for 4 groups, but need be independent
+
+cmat=cbind(crab_vs_shrimp=c(0,1,-1,0), one_vs_both=c(0,-1/2,-1/2,1), none_vs_symbiont=c(1,-1/3,-1/3,-1/3))
+round(crossprod(cmat),1)
+
+emmeans(mckeon.glmmTMB, ~SYMBIONT, contr=list(SYMBIONT=cmat), type='response')
+
+## the odds of predation are nearly 90% higher for crabs than if there are shrimp (but non-significant)
+## one vs. both, non-significant, symbiont vs. none is significant
+##e.g. comparing 1vs2 symbionts 1/0.22 = 4.54, you are 4.5 times more likely to be predated on with 1 instead of two
+
+## R^2
+r.squaredGLMM(mckeon.glmmTMB)
+#                  R2m       R2c
+#theoretical 0.1489321 0.8674549
+#delta       0.1437647 0.8373578
+# when we account for the treatments we can explain about 14% of the variability, it does have an effect but its only explaining 14%. When we put the random blocks(tanks) in, we can explain 84% of the variability. There is quiet some difference between the tanks themselves. 
 
 
-# Model validation
 
-# Model investigation / hypothesis testing
+## Summary plot
 
-# Predictions
+emmeans(mckeon.glmmTMB, ~SYMBIONT, type='response') %>% as.data.frame() %>%
+  ggplot(aes(y=prob, x=SYMBIONT)) +
+  geom_pointrange(aes(ymin=lower.CL, ymax=upper.CL))
+```
 
-# Summary figures
 
-# References
+```{r}
+
+```
+
+

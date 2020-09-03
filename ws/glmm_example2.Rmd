@@ -119,6 +119,20 @@ glimpse(norin)
 
 
 # Exploratory data analysis
+```{r}
+##look into random vs. fixed effects
+## turn categories into factors
+norin <- norin %>% mutate(FISHID=factor(FISHID), TRIAL=factor(TRIAL))
+
+#plot
+ggplot(norin, aes(y=CHANGE, x=TRIAL)) + geom_boxplot() 
+
+ggplot(norin, aes(y=CHANGE, x=SMR_contr, shape=TRIAL, color=TRIAL)) + geom_smooth(method='lm') + geom_point()
+## careful with this graph, it doesnt take into consideration mass of fish, blocking (no independence), etc.
+
+
+
+```
 
 Model formula:
 $$
@@ -131,10 +145,71 @@ and $\bf{X}$ is the  model matrix representing the overall intercept and effects
 $\bf{Z}$ represents a cell means model matrix for the random intercepts associated with individual fish.
 
 # Fit the model
+```{r}
+#Lets fit a model that includes interaction
+
+norin.glmmTMB <- glmmTMB(CHANGE ~ TRIAL*SMR_contr + MASS + (1|FISHID), data=norin, REML=FALSE)
+
+## But is it necessary to include the interaction?? we can compare a model that does include it and one that does not
+## Interaction between TRIAL *SMR-contr, including an additive effect for MASS as a way of standardizing that metabolism can be related to mass, add mass also cause fish are changing in mass, random effect is 1|FISHID, as fish are block. Cannot use continous data as a random effect. We know mass has an effect but we do not care about it we only standardize.
+
+norin.glmmTMB1 <- glmmTMB(CHANGE ~ TRIAL*SMR_contr + offset(MASS) + (1|FISHID), data=norin, REML=FALSE)
+## Offset standardises it without calculating it, you do not use a degree of freedom, but need to be careful mass to mbr has an almost 1;1 change ratio
+## REML had to be set to FALSE since we compare two models that only differ in their fixed effects
+
+# we want to compare a model that has an interaction which one that does not (multplicative vs. +)
+norin.glmmTMB2 <- glmmTMB(CHANGE ~ TRIAL + SMR_contr + MASS + (1|FISHID), data=norin, REML=FALSE)
+
+# Also include interaction model without MASS
+norin.glmmTMB3 <- glmmTMB(CHANGE ~ TRIAL*SMR_contr + (1|FISHID), data=norin, REML=FALSE)
+
+AICc(norin.glmmTMB, norin.glmmTMB1, norin.glmmTMB2, norin.glmmTMB3)
+
+#             df     AICc
+#norin.glmmTMB   9 1666.596 # still considered a better model than below, probably mass relationship not a simplistic 1:1
+#norin.glmmTMB1  8 1673.943 # less complex, uses less df
+#norin.glmmTMB2  7       NA
+#norin.glmmTB3   8 1664.473 # best model, mass no effect
+
+#update existing model which reml=TRUE
+
+norin.glmmTMB3a <- update(norin.glmmTMB3, REML=TRUE)
+
+## is the trend different for each fish?
+
+norin.glmmTMB3b <- update(norin.glmmTMB3a, ~TRIAL*SMR_contr + (SMR_contr|FISHID))
+
+## model did not converge, we can fit a model that says each fish responds to treatment but not metabolic rate
+
+norin.glmmTMB3bc <- update(norin.glmmTMB3a, ~TRIAL*SMR_contr + (TRIAL|FISHID))
+
+AICc(norin.glmmTMB3a, norin.glmmTMB3b, norin.glmmTMB3bc)
+
+#                 df     AICc
+#norin.glmmTMB3a   8 1637.191
+#norin.glmmTMB3b  10       NA
+#norin.glmmTMB3bc 13 1596.153
+## Shows that bc is the better model
 
 
 
+```
 # Model validation
+```{r}
+plot_model(norin.glmmTMB3bc, type='diag')[-2] %>% plot_grid ## look basically ok
+
+summary(norin.glmmTMB3bc)
+
+## first look at random effects, 18.2 units variance between fish, residual is only 2.9 (unexplained). There is much variable between fish than within treatments within the fish. Different fish respond very differently. Both in baseline and response to trials. Blocking was a good thing, it improved the power of the test. Corr measures correlation between intercepts and slopes.
+
+#Now for the fixed components, INTERCEPT is intercept for first group (High temp), we compare the intercepts but only in regards to first group
+
+emtrends(norin.glmmTMB3bc, ~TRIAL, var='SMR_contr') # gives slopes
+
+## now need a tukeys test post hoc for the other comparisons like salinity vs. hypoxia
+emtrends(norin.glmmTMB3bc, pairwise~TRIAL, var='SMR_contr')
+
+```
 
 # Model investigation / hypothesis testing
 
