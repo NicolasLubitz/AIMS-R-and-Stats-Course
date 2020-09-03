@@ -67,6 +67,8 @@ library(broom.mixed)
 
 ![Starlings](../resources/starlings.jpg){width="200" height="274"}
 
+![Sampling design](../resources/ws9.4aQ1.diag.png)
+
 Format of starling\_full.RSV data files
 
 SITUATION   MONTH   MASS   BIRD
@@ -91,7 +93,7 @@ tree        Jan     85     tree1
 
 
 
-![Sampling design](../docs/figures/samplingDesign-1.png){width="700"}
+<!-- ![Sampling design](../docs/figures/samplingDesign-1.png){width="700"} -->
 
 # Read in the data
 

@@ -61,6 +61,7 @@ library(MASS)      #for glm.nb
 library(MuMIn)     #for AICc
 library(tidyverse) #for data wrangling
 library(modelr)    #for auxillary modelling functions
+library(DHARMa)    #
 ```
 
 # Scenario
@@ -168,17 +169,56 @@ x <- rpois(100000000, lambda=2.67)
 tab.1= table(x==0)
 tab.1/sum(tab.1)
 
+##DHARMa will use standardized residuals to simulate your model and incorporate them as "noise", also good for auto-correlation (lack of independence).
 
+simulateResiduals1 <- simulateResiduals(quinn.glm1, plot=TRUE)
+# residuals scaled so centred around 0.5, red stars show residuals have maxed out,  outside of range of simulated data. Big flag for 0 inflation, do not expect as many 0s as we do. Here it fits three lines, one is in centre one around 25th quantile one around 75th quantile, its done because there might not be a straight pattern in your residuals. Data of low numbers of barnacles might operate in a linear matter but higher barnacle counts might not. We want to see that all of them are roughly linear, if we have 0 inflated the bottom one might be wiggly. 
 
+testDispersion(quinn.glm1)
+
+## Test for dispersion, how does our data relate to simulated values. It is way out of range, red line out of range
+
+testZeroInflation(quinn.glm1)
+## shows evidence for excessive 0s, red line out of range, we could address this by using a 0 inflated model. We expecte 0 zeros in a lot of populations, 1 in a few, but redline (actual 0s) for 2 is way more frequent than should be
+## Could also use a negative binomial.
+
+quinn.nb <- glm.nb(RECRUITS ~ DENSITY * SEASON, data=quinn)
+autoplot(quinn.nb, which =1:6)
+simulateResiduals <- simulateResiduals(quinn.nb, plot=TRUE)
+## qq plot looks way better, and residuals only show one outlier. It is a more appropriate model
+## If we did a goodness of fit test, shows slight no fit but test before is more robust
+
+1-pchisq(quinn.nb$deviance, df=quinn.nb$df.residual)
+
+quinn.nb$deviance/quinn.nb$df.residual
+
+##graph DENSITY*SEASON PLOT, if the lines were parallel no interaction, if lines cross there is an interaction, would not put a graph like this into your paper but helps to interpret
+plot(allEffects(quinn.nb), multiline=TRUE, ci.style='bar')
+## put on link scale(log scale), so it will be on the same scale as our summary table
+plot(allEffects(quinn.nb), multiline=TRUE, ci.style='bar', type='link')
+summary(quinn.nb)
+
+##intercept represents autumn high (alphabetical), often does not matter which is first group. So everything gets compared to intercept, so if intercept is estimated poorly everything is off. If you have a choice and if you have low replication in one category do not use that group as first/intercept. First line here is representing difference between autumn high and low in autumn. SEASONSpring is difference between autumn high and spring high, same for summer and winter, now for the interactions: You expect the gap between summer and autumn to be as autumn to autumn but it is much bigger which is significant, winter is not significant because it is more variable. There is evidence of an interaction which is driven by summer being different
+
+plot(allEffects(quinn.nb), multiline=TRUE, ci.style='bar') ## to interpret this graph, we use tidy to change the values to the response scale
+
+tidy(quinn.nb, conf.int = TRUE, exponentiate = TRUE) ## no the values are not plus minus but multiplication, on this scale if the conf.int does not cross 1 its significant
+
+## lets do a pairwise comparison
+emmeans(quinn.nb, pairwise ~ DENSITY| SEASON, type='response')
 
 ```
-
-
-
-# Predictions
-
-
 # Summary figures
+```{r}
+# lets make a figure
+newdata <- emmeans(quinn.nb, ~DENSITY|SEASON, type='response') %>% as.data.frame()
+head(newdata)
+
+ggplot(newdata, aes(y=response, x=SEASON, fill=DENSITY)) + 
+  geom_pointrange(aes(ymin=asymp.LCL, ymax=asymp.UCL), shape=21, position = position_dodge(width=0.2)) +
+  theme_classic() + annotate(geom ='text', x='Summer', y=70, label='*', size=7)
+```
+
 
 
 
