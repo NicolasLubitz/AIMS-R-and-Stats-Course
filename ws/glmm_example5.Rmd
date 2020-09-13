@@ -76,6 +76,21 @@ glimpse(owls)
 
 
 # Exploratory data analysis
+```{r}
+owls <- owls %>% mutate(Nest=factor(Nest), FoodTreatment= factor(FoodTreatment), SexParent=factor(SexParent),Ncalls=SiblingNegotiation)
+
+## start your models simple and built them up
+
+ggplot(data = owls, aes(y=Ncalls, x = ArrivalTime, color=SexParent)) + geom_point() + geom_smooth(method='lm') + facet_grid(~FoodTreatment)
+
+##lots of zeros in satiated group, not sure if we would expect as many 0s from a poisson. otherwise trends harder to tell, bit of an affect for arrival time and food treatment, parentsex more dispersed.
+
+ggplot(data = owls, aes(y=Ncalls, x = BroodSize, color=SexParent)) + geom_point() + geom_smooth(method='lm') + facet_grid(~FoodTreatment)
+
+## its very important that the predictors that you put in a model should have the same range of values. they need to overlap alot in x values
+
+```
+
 
 Model formula:
 $$
@@ -89,6 +104,123 @@ Brood size was also incorporated as an offset.
 $\bf{Z}$ represents a cell means model matrix for the random intercepts associated with individual nests.
 
 # Fit the model
+```{r}
+## We have to account for the blocks in the data, random effects. Pick the things were actually interested in, mainly foodtreatment
+
+owls.glmmTB <- glmmTMB(Ncalls ~ FoodTreatment + (1|Nest), data=owls, family=poisson(link='log'), REML=FALSE)
+
+owls.glmmTB1 <- glmmTMB(Ncalls ~ FoodTreatment*scale(ArrivalTime) + (1|Nest), data=owls, family=poisson(link='log'), REML=FALSE)
+
+## scale arrival time because it is continous
+
+## add model that has additive form not interaction
+owls.glmmTB2 <- glmmTMB(Ncalls ~ FoodTreatment + scale(ArrivalTime) + (1|Nest), data=owls, family=poisson(link='log'), REML=FALSE)
+
+## this adds more complexity, 3 way interaction with parents
+owls.glmmTB3 <- glmmTMB(Ncalls ~ SexParent*FoodTreatment*scale(ArrivalTime) + (1|Nest), data=owls, family=poisson(link='log'), REML=FALSE)
+
+## lets check AICc
+AICc(owls.glmmTB, owls.glmmTB1, owls.glmmTB2, owls.glmmTB3)
+
+## besides the first only food, the other ones are similiar
+#             df     AICc
+#owls.glmmTB   3 5214.825
+#owls.glmmTB1  5 5012.187
+#owls.glmmTB2  4 5010.160
+#owls.glmmTB3  9 5011.510
+
+
+## lets try to standardize for the brood size, log it, offset is not modelled, just standardized (days at liberty in sharks), log it to remain as a 1:1 relationship, for a slope of one, needs to be on same scale
+
+owls.glmmTB4 <- glmmTMB(Ncalls ~ FoodTreatment + scale(ArrivalTime) + offset(log(BroodSize)) + (1|Nest), data=owls, family=poisson(link='log'), REML=FALSE)
+
+AICc(owls.glmmTB, owls.glmmTB1, owls.glmmTB2, owls.glmmTB3, owls.glmmTB4)
+#             df     AICc
+#owls.glmmTB   3 5214.825
+#owls.glmmTB1  5 5012.187
+#owls.glmmTB2  4 5010.160
+#owls.glmmTB3  9 5011.510
+#owls.glmmTB4  4 5009.073
+
+## this one is better
+
+## Update, with reml for unbiased estimates, were going into random effects now
+owls.glmmTB4a = update(owls.glmmTB4, REML=TRUE)
+
+
+## this keeps everything but take away the random effect that was there (1|nest) and replace with a new one, now random intercept random slope model associated with arrival time
+owls.glmmTB4b = update(owls.glmmTB4a, .~.-(1|Nest) + (scale(ArrivalTime)|Nest))
+
+AICc(owls.glmmTB4a, owls.glmmTB4b)
+## b is even better
+
+##this keeps everything but take away the random effect that was there (1|nest) and replace with a new one, now random intercept random slope model associated with arrival time and food treatment
+owls.glmmTB4c = update(owls.glmmTB4a, .~.-(1|Nest) + (FoodTreatment+scale(ArrivalTime)|Nest))
+
+AICc(owls.glmmTB4a, owls.glmmTB4b, owls.glmmTB4c)
+
+## c is even better
+## Further diagnostics
+
+simulatedResiduals <- simulateResiduals(owls.glmmTB4c, plot=TRUE)
+
+## it doesnt fit our nominated distribution, the lower end (tail) is bigger, more mass at lower end, than expected for a poisson. Is it because the model is overdispersed? Does not really appear to be. Could be corrected by negative binomial.There are outliers, some extra zeros. Graph on right looks at different parts of residuals (quantiles), suggest there is a bit of wobblinies but not the type that concerns us too much. if It was a parabula it would be concerning, our continous variable is arrival time, it might imply there is not a linear relationship with arrival time. the Bumps maybe are real, need more knowledge on ecology. We should ignore it, it is noise in residuals.
+
+## is the model 0 inflated?
+testZeroInflation(owls.glmmTB4c)
+## this models a distribution of expected 0 from our data, our red line is way out of the distribution. We are certain it is 0 inflated.
+
+testDispersion(owls.glmmTB4c)
+## it is well within the usual simulated range, so not overdispersed
+
+## now test autocorrelation
+
+testTemporalAutocorrelation(owls.glmmTB4c)
+
+
+## Now we will fit a 0 inflated model
+
+owls.glmmTMB5 <- update(owls.glmmTB4c, ziformula=~1)
+## tilt and then a 1, this is a model that only has an intercept in the 0 inflated part
+## 0 inflation model fits the two processes underlying our data (0 could be artefact of simply not detecting calls, model just accounts for the fact that I did not detect any calls)
+
+summary(owls.glmmTMB5)
+## pay attention first to the 0 inflated part
+## 0 inflated model is binomial on log odds scale
+exp(-1.3705)
+##0.25 is probability of detecting, of our 0s 4 times more of them are considered falls 0 than actual true 0s
+## Maybe we should investigate our 0s. Are they related to something? food treatment or arrival time?
+
+owls.glmmTMB6 <- update(owls.glmmTB4c, ziformula=~scale(ArrivalTime))
+summary(owls.glmmTMB6)
+## parallel lines = no exception
+exp(0.75177)
+#2.12075 = y when x = 0 for the deprived group (intercept) average number of calls per chick for the deprived group at the average arrival time.
+exp(-0.75562)
+#0.4697193, same position for satiated group
+#exp(0.75177-0.75562) = 0.99, on average satiated group only has one call per chick at average arrival time, it declined by 1-0.469 = is a 53% decline.
+exp(-0.16517)
+##0.8477496 for every 1 unit change in scaled arrival time, the number of calls declines by 16%
+
+## R^2 value
+
+r.squaredGLMM(owls.glmmTMB6)
+#ERROR cannot yet handle object with zero inflation
+
+##with means that you dont have keep writing owl$ this owl$ that is sets to scope variables are always in owl
+owls.grid <- with(owls, list(FoodTreatment=levels(FoodTreatment), ArrivalTime=modelr::seq_range(ArrivalTime, n=100), SexParent=levels(SexParent)))
+
+## reminder, its not gonna use sex parent as it was not in the model
+
+newdata = emmeans(owls.glmmTMB6, ~ArrivalTime|FoodTreatment, at=owls.grid, type='response') %>% as.data.frame()
+
+ggplot(newdata, aes(y=rate, x=ArrivalTime)) +
+  geom_line(aes(color=FoodTreatment)) +
+  geom_ribbon(aes(ymin=lower.CL, ymax=upper.CL, fill=FoodTreatment), alpha=0.2)
+
+
+## if u put raw data back on graph it wouldnt match it wouldnt account for 0 inflation, it wouldnt account for brood size, it wouldnt account for blocks, 
+```
 
 
 # Model validation
